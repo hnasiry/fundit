@@ -1,64 +1,115 @@
 #!/bin/sh
-set -e
+set -eu
 
-# Run as root to ensure we have permissions to create directories and set permissions
+APP_DIR="/var/www/html"
+APP_USER="${APP_USER:-www-data}"
+APP_GROUP="${APP_GROUP:-www-data}"
+
+run_as_app() {
+    if [ "$(id -u)" = '0' ] && command -v gosu >/dev/null 2>&1; then
+        gosu "${APP_USER}:${APP_GROUP}" "$@"
+    else
+        "$@"
+    fi
+}
+
 if [ "$(id -u)" = '0' ]; then
-    # Create necessary directories with proper permissions
-    mkdir -p /var/www/html/storage/framework/sessions
-    mkdir -p /var/www/html/storage/framework/views
-    mkdir -p /var/www/html/storage/framework/cache
-    mkdir -p /var/www/html/bootstrap/cache
-    mkdir -p /var/www/html/storage/logs
+    install -d -m 775 -o "${APP_USER}" -g "${APP_GROUP}" \
+        "${APP_DIR}/storage" \
+        "${APP_DIR}/storage/framework" \
+        "${APP_DIR}/storage/framework/sessions" \
+        "${APP_DIR}/storage/framework/views" \
+        "${APP_DIR}/storage/framework/cache" \
+        "${APP_DIR}/storage/logs" \
+        "${APP_DIR}/bootstrap/cache"
 
-    # Set directory ownership and permissions
-    chown -R www-data:www-data /var/www/html/storage
-    chown -R www-data:www-data /var/www/html/bootstrap/cache
-    chmod -R 775 /var/www/html/storage
-    chmod -R 775 /var/www/html/bootstrap/cache
+    chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache"
+    chmod -R 775 "${APP_DIR}/storage" "${APP_DIR}/bootstrap/cache"
 
-    # Create log file and set permissions
-    touch /var/www/html/storage/logs/laravel.log
-    chown www-data:www-data /var/www/html/storage/logs/laravel.log
-    chmod 664 /var/www/html/storage/logs/laravel.log
+    if [ ! -f "${APP_DIR}/storage/logs/laravel.log" ]; then
+        touch "${APP_DIR}/storage/logs/laravel.log"
+    fi
 
-    # Switch to www-data user and run the rest of the script
-    exec su-exec www-data "$0" "$@"
+    chown "${APP_USER}:${APP_GROUP}" "${APP_DIR}/storage/logs/laravel.log"
+    chmod 664 "${APP_DIR}/storage/logs/laravel.log"
 fi
 
-# The rest of the script runs as www-data
-cd /var/www/html
+cd "${APP_DIR}"
 
-# Generate application key if not exists
-if [ ! -f ".env" ]; then
-    cp .env.example .env
-    php artisan key:generate
+if [ "$#" -eq 0 ]; then
+    set -- php-fpm
 fi
 
-# Install dependencies if vendor directory doesn't exist
-if [ ! -d "vendor" ]; then
-    composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+if [ ! -f artisan ]; then
+    if [ "$(id -u)" = '0' ] && command -v gosu >/dev/null 2>&1; then
+        exec gosu "${APP_USER}:${APP_GROUP}" "$@"
+    fi
+
+    exec "$@"
 fi
 
-# Wait for database to be ready
-echo "Waiting for database connection..."
-until php artisan db:monitor > /dev/null 2>&1; do
-    echo "Waiting for database connection..."
-    sleep 1
-done
+command="$1"
 
-# Run database migrations
-echo "Running database migrations..."
-php artisan migrate --force
+if [ "$command" = "php-fpm" ] || [ "$command" = "php-fpm8.4" ]; then
+    umask 002
 
-# Clear and cache routes and config
-echo "Clearing caches..."
-php artisan config:clear
-php artisan cache:clear
-php artisan view:clear
-php artisan route:clear
-php artisan config:cache
-php artisan view:cache
+    if [ -f composer.json ] && [ ! -d vendor ]; then
+        run_as_app composer install --no-interaction --prefer-dist
+    fi
 
-# Start PHP-FPM
-echo "Starting PHP-FPM..."
-exec php-fpm
+    if [ ! -f .env ] && [ -f .env.example ]; then
+        run_as_app cp .env.example .env
+    fi
+
+    if [ -f .env ]; then
+        if ! grep -q '^APP_KEY=' .env 2>/dev/null || [ -z "$(grep '^APP_KEY=' .env | cut -d '=' -f2-)" ]; then
+            run_as_app php artisan key:generate --force --ansi
+        fi
+    else
+        echo "Skipping APP_KEY generation because no .env file is present." >&2
+    fi
+
+    if [ -f .env ]; then
+        if [ "${DB_CONNECTION:-}" = "mysql" ]; then
+            echo "Waiting for database connection..."
+            until run_as_app php -r '
+                $host = getenv("DB_HOST") ?: "mysql";
+                $port = getenv("DB_PORT") ?: 3306;
+                $db   = getenv("DB_DATABASE") ?: "";
+                $user = getenv("DB_USERNAME") ?: "";
+                $pass = getenv("DB_PASSWORD") ?: "";
+
+                $dsn = $db !== "" ?
+                    sprintf("mysql:host=%s;port=%s;dbname=%s", $host, $port, $db) :
+                    sprintf("mysql:host=%s;port=%s", $host, $port);
+
+                try {
+                    new PDO($dsn, $user, $pass, [PDO::ATTR_TIMEOUT => 1, PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                    exit(0);
+                } catch (PDOException $e) {
+                    exit(1);
+                }
+            ';
+            do
+                echo "  Database is unavailable - sleeping"
+                sleep 1
+            done
+        fi
+
+        echo "Running database migrations..."
+        run_as_app php artisan migrate --force --no-interaction
+
+        echo "Clearing caches..."
+        run_as_app php artisan optimize:clear
+    else
+        echo "Skipping database migrations and cache clearing because no .env file is present." >&2
+    fi
+
+    exec "$@"
+fi
+
+if [ "$(id -u)" = '0' ] && command -v gosu >/dev/null 2>&1; then
+    exec gosu "${APP_USER}:${APP_GROUP}" "$@"
+fi
+
+exec "$@"

@@ -1,17 +1,17 @@
+version: "3.9"
+
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    image: fundit-app
+    image: fundit-app:dev
     restart: unless-stopped
     volumes:
       - ./:/var/www/html
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - mysql
+      - redis
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -21,7 +21,9 @@ services:
       DB_DATABASE: fundit
       DB_USERNAME: fundit
       DB_PASSWORD: fundit
+      CACHE_DRIVER: redis
       QUEUE_CONNECTION: database
+      REDIS_HOST: redis
   nginx:
     image: nginx:stable-alpine
     restart: unless-stopped
@@ -29,7 +31,7 @@ services:
       - "8000:80"
     volumes:
       - ./:/var/www/html
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - app
   mysql:
@@ -49,19 +51,18 @@ services:
       interval: 5s
       retries: 10
       timeout: 5s
-
   redis:
-      image: redis:alpine
-      restart: unless-stopped
-      ports:
-          - "6379:6379"
-      volumes:
-          - redis-data:/data
-      healthcheck:
-          test: [ "CMD", "redis-cli", "ping" ]
-          interval: 5s
-          timeout: 3s
-          retries: 5
+    image: redis:alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   mysql-data:
