@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Repositories\Contracts;
+namespace App\Domain\Banking\Repositories;
 
 use App\Models\Card;
 

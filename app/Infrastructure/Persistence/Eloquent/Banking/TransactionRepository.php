@@ -2,15 +2,18 @@
 
 declare(strict_types=1);
 
-namespace App\Repositories\Eloquent;
+namespace App\Infrastructure\Persistence\Eloquent\Banking;
 
+use App\Domain\Banking\Repositories\TransactionRepositoryInterface;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Repositories\Contracts\TransactionRepositoryInterface;
 use Illuminate\Support\Collection;
 
 final class TransactionRepository implements TransactionRepositoryInterface
 {
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
     public function create(array $attributes): Transaction
     {
         return Transaction::create($attributes);
@@ -42,7 +45,7 @@ final class TransactionRepository implements TransactionRepositoryInterface
                     })
                     ->orderByDesc('created_at')
                     ->limit($transactionsLimit)
-                    ->get()
+                    ->get(),
             );
         });
 

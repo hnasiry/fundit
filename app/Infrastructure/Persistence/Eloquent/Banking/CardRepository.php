@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Repositories\Eloquent;
+namespace App\Infrastructure\Persistence\Eloquent\Banking;
 
+use App\Domain\Banking\Repositories\CardRepositoryInterface;
 use App\Models\Card;
-use App\Repositories\Contracts\CardRepositoryInterface;
 
 final class CardRepository implements CardRepositoryInterface
 {

@@ -2,13 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Application\Banking\Services\TransferFundsService;
+use App\Domain\Banking\DTO\TransferData;
 use App\Exceptions\CardNotFoundException;
 use App\Exceptions\InsufficientFundsException;
 use App\Jobs\SendSmsNotificationJob;
 use App\Models\Account;
 use App\Models\Card;
 use App\Models\User;
-use App\Services\Transactions\TransferService;
 use Illuminate\Support\Facades\Queue;
 
 it('transfers funds between cards and updates balances', function (): void {
@@ -23,8 +24,9 @@ it('transfers funds between cards and updates balances', function (): void {
     $sourceCard = Card::factory()->for($sourceAccount)->create(['balance' => 200_000]);
     $destinationCard = Card::factory()->for($destinationAccount)->create(['balance' => 50_000]);
 
-    $service = app(TransferService::class);
-    $transaction = $service->transfer($sourceCard->number, $destinationCard->number, 75_000);
+    /** @var TransferFundsService $service */
+    $service = app(TransferFundsService::class);
+    $transaction = $service->handle(new TransferData($sourceCard->number, $destinationCard->number, 75_000));
 
     expect($transaction->amount)->toBe(75_000)
         ->and($transaction->source_card_id)->toBe($sourceCard->id)
@@ -47,9 +49,10 @@ it('throws an exception when source card has insufficient funds', function (): v
         ->for(Account::factory()->for(User::factory()))
         ->create(['balance' => 10_000]);
 
-    $service = app(TransferService::class);
+    /** @var TransferFundsService $service */
+    $service = app(TransferFundsService::class);
 
-    $service->transfer($sourceCard->number, $destinationCard->number, 50_000);
+    $service->handle(new TransferData($sourceCard->number, $destinationCard->number, 50_000));
 })->throws(InsufficientFundsException::class);
 
 it('throws an exception when a card cannot be found', function (): void {
@@ -59,7 +62,8 @@ it('throws an exception when a card cannot be found', function (): void {
         ->for(Account::factory()->for(User::factory()))
         ->create(['balance' => 10_000]);
 
-    $service = app(TransferService::class);
+    /** @var TransferFundsService $service */
+    $service = app(TransferFundsService::class);
 
-    $service->transfer('1234567890123456', $destinationCard->number, 5_000);
+    $service->handle(new TransferData('1234567890123456', $destinationCard->number, 5_000));
 })->throws(CardNotFoundException::class);

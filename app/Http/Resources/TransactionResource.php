@@ -6,8 +6,20 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use OpenApi\Attributes as OA;
 
 /** @mixin \App\Models\Transaction */
+#[OA\Schema(
+    schema: 'Transaction',
+    required: ['reference_number', 'source_card', 'destination_card', 'amount', 'created_at'],
+    properties: [
+        new OA\Property(property: 'reference_number', type: 'string'),
+        new OA\Property(property: 'source_card', type: 'string'),
+        new OA\Property(property: 'destination_card', type: 'string'),
+        new OA\Property(property: 'amount', type: 'integer', format: 'int64'),
+        new OA\Property(property: 'created_at', type: 'string', format: 'date-time'),
+    ]
+)]
 final class TransactionResource extends JsonResource
 {
     /**

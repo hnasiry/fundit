@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use App\Repositories\Contracts\CardRepositoryInterface;
-use App\Repositories\Contracts\TransactionRepositoryInterface;
-use App\Repositories\Eloquent\CardRepository;
-use App\Repositories\Eloquent\TransactionRepository;
+use App\Domain\Banking\Repositories\CardRepositoryInterface;
+use App\Domain\Banking\Repositories\TransactionRepositoryInterface;
+use App\Infrastructure\Persistence\Eloquent\Banking\CardRepository;
+use App\Infrastructure\Persistence\Eloquent\Banking\TransactionRepository;
 use App\Services\Notifications\Sms\KavenegarSmsProvider;
 use App\Services\Notifications\Sms\SmsIrProvider;
 use App\Services\Notifications\Sms\SmsManager;

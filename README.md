@@ -1,17 +1,17 @@
 # Fundit - Banking API
 
-A simplified banking system API built with Laravel that demonstrates clean architecture patterns, a multi-provider SMS notification strategy, queued jobs, reporting endpoints, automated testing, and Docker-based local development.
+A simplified banking API built with Laravel that demonstrates clean architecture patterns, token-based authentication, queued job processing, and automated documentation.
 
 ## Features
 
 - Card-to-card transfers with balance validation and transactional integrity
-- SMS notifications for senders and receivers using a pluggable provider strategy
+- Token authentication powered by [Laravel Sanctum](https://laravel.com/docs/sanctum)
+- Interactive Swagger UI documentation generated with [L5 Swagger](https://github.com/DarkaOnLine/L5-Swagger)
 - Reporting endpoint that returns the top three users and their latest ten transactions
 - Repository and service layers to encapsulate data access and business rules
-- Asynchronous job dispatching via Laravel queues
-- Comprehensive unit and feature test coverage executed with Pest
-- Docker Compose environment with PHP-FPM, Nginx, and MySQL
-- GitHub Actions workflow for automated CI testing
+- Queued notifications processed through [Laravel Horizon](https://laravel.com/docs/horizon)
+- Comprehensive automated tests executed with Pest
+- Docker Compose environment with PHP-FPM, Nginx, MySQL, and Redis
 
 ## Architecture Overview
 
@@ -30,43 +30,121 @@ app/
     └── Transactions/     # Transfer logic and notification orchestration
 ```
 
-Business logic lives inside services and repositories while controllers remain thin. SMS notifications use the Strategy pattern so new providers can be introduced by implementing `SmsProviderInterface` and registering the class.
+## Requirements
 
-## Getting Started
-
-### Requirements
-
-- PHP 8.2+ (or Docker)
+- PHP 8.4+
 - Composer
 - Node.js & npm (for optional asset compilation)
 - MySQL 8.x
+- Redis 6.x (for queues and Horizon)
+- Docker (optional, for containerized setup)
 
-### Installation
+## Installation
 
 1. Clone the repository and install PHP dependencies:
 
    ```bash
+   git clone https://github.com/your-org/fundit.git
+   cd fundit
    composer install
    cp .env.example .env
    php artisan key:generate
    ```
 
-2. Configure your `.env` file with database credentials and SMS provider settings.
+2. Configure `.env` with database and Redis credentials. The project defaults to `QUEUE_CONNECTION=redis` and `REDIS_CLIENT=predis` for Horizon support.
 
-3. Run migrations and seeders as needed:
+3. Run the migrations and seeders (creates a ready-to-use API testing user, demo accounts, and transactions):
 
    ```bash
-   php artisan migrate
+   php artisan migrate --seed
    ```
 
-4. (Optional) Build frontend assets:
+4. Generate the OpenAPI specification and publish the Swagger UI assets:
+
+   ```bash
+   php artisan l5-swagger:generate
+   ```
+
+5. (Optional) Build frontend assets:
 
    ```bash
    npm install
    npm run build
    ```
 
-### Docker Setup
+## Seeded API Credentials
+
+After seeding, you can authenticate immediately with the following user:
+
+- **Email:** `apitester@example.com`
+- **Password:** `Password123!`
+
+Additional demo users, accounts, and cross-user transactions are created automatically for testing the reports and transfer flows.
+
+## Running the Application
+
+```bash
+php artisan serve
+```
+
+Start Horizon to process queued jobs (required for transfer notifications):
+
+```bash
+php artisan horizon
+```
+
+The Horizon dashboard is available at `/horizon` (accessible in local/test environments or to emails listed in `HORIZON_VIEWER_EMAILS`).
+
+## API Authentication Flow
+
+1. **Register** – `POST /api/auth/register`
+2. **Login** – `POST /api/auth/login`
+3. **Use the returned bearer token** for all protected endpoints (`Authorization: Bearer <token>`)
+4. **Logout** – `POST /api/auth/logout`
+
+Example login request using the seeded user:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"apitester@example.com","password":"Password123!"}'
+```
+
+## Protected API Endpoints
+
+All endpoints below require a valid Sanctum bearer token.
+
+### Card-to-Card Transfer
+
+`POST /api/transactions/transfer`
+
+```bash
+curl -X POST http://localhost:8000/api/transactions/transfer \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"source_card":"5555444433331111","destination_card":"5556000100000001","amount":75000}'
+```
+
+### Top Users Report
+
+`GET /api/reports/top-users`
+
+```bash
+curl -X GET http://localhost:8000/api/reports/top-users \
+  -H "Authorization: Bearer <token>"
+```
+
+### Swagger Documentation
+
+Regenerate the docs whenever controller annotations change:
+
+```bash
+php artisan l5-swagger:generate
+```
+
+Open the interactive UI at: [http://localhost:8000/api/documentation](http://localhost:8000/api/documentation)
+
+## Docker Setup
 
 A complete environment is available via Docker Compose:
 
@@ -76,86 +154,34 @@ docker-compose up -d
 
 After the containers start:
 
-1. Install dependencies inside the application container:
+```bash
+docker-compose exec app composer install
+docker-compose exec app cp .env.example .env
+docker-compose exec app php artisan key:generate
+docker-compose exec app php artisan migrate --seed
+docker-compose exec app php artisan l5-swagger:generate
+docker-compose exec app php artisan horizon
+```
 
-   ```bash
-   docker-compose exec app composer install
-   docker-compose exec app cp .env.example .env
-   docker-compose exec app php artisan key:generate
-   docker-compose exec app php artisan migrate
-   ```
+The API will be available at [http://localhost:8000](http://localhost:8000) and Horizon at [http://localhost:8000/horizon](http://localhost:8000/horizon).
 
-2. The API will be available at [http://localhost:8000](http://localhost:8000).
+## Running Tests
 
-### Running Tests
-
-Execute the automated test suite (unit + feature) using Pest:
+Execute the automated test suite using Pest:
 
 ```bash
 php artisan test
 ```
-
-## API Reference
-
-### Card-to-Card Transfer
-
-`POST /api/transactions/transfer`
-
-Request body:
-
-```json
-{
-  "source_card": "6037991234567890",
-  "destination_card": "6274129876543210",
-  "amount": 150000
-}
-```
-
-Successful response:
-
-```json
-{
-  "success": true,
-  "reference_number": "TRX-20250101-ABC123"
-}
-```
-
-### Top Users Report
-
-`GET /api/reports/top-users`
-
-Response body:
-
-```json
-{
-  "top_users": [
-    {
-      "user_id": "1",
-      "name": "Ali",
-      "total_transactions": 45,
-      "latest_transactions": [
-        {
-          "reference_number": "TRX-20251013-0001",
-          "source_card": "603799****7890",
-          "destination_card": "627412****3210",
-          "amount": 150000,
-          "created_at": "2025-10-13T12:00:00"
-        }
-      ]
-    }
-  ]
-}
-```
-
-Card numbers are masked in reports to protect sensitive data.
-
-## GitHub Actions CI
-
-The repository includes a workflow at `.github/workflows/tests.yml` that installs dependencies and runs the test suite on every push and pull request to ensure continuous integration.
 
 ## Extending SMS Providers
 
 1. Create a new provider class that implements `App\Services\Notifications\Sms\SmsProviderInterface`.
 2. Register the provider in `AppServiceProvider` by adding it to the `SmsManager` constructor array.
 3. Add any required credentials to `config/sms.php` and `.env`.
+
+## Troubleshooting
+
+- Ensure Redis is running and reachable when starting Horizon.
+- Run `php artisan optimize:clear` if you update configuration values that are cached.
+- Regenerate Swagger docs after modifying controller or resource annotations.
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Services\Transactions;
+namespace App\Application\Banking\Services;
 
 use App\Jobs\SendSmsNotificationJob;
 use App\Models\Transaction;

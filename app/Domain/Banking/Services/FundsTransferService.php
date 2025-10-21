@@ -2,53 +2,53 @@
 
 declare(strict_types=1);
 
-namespace App\Services\Transactions;
+namespace App\Domain\Banking\Services;
 
+use App\Domain\Banking\DTO\TransferData;
+use App\Domain\Banking\Repositories\CardRepositoryInterface;
+use App\Domain\Banking\Repositories\TransactionRepositoryInterface;
 use App\Exceptions\CardNotFoundException;
 use App\Exceptions\InsufficientFundsException;
 use App\Exceptions\InvalidTransferException;
 use App\Models\Transaction;
-use App\Repositories\Contracts\CardRepositoryInterface;
-use App\Repositories\Contracts\TransactionRepositoryInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-final class TransferService
+final class FundsTransferService
 {
     public function __construct(
         private readonly CardRepositoryInterface $cardRepository,
         private readonly TransactionRepositoryInterface $transactionRepository,
-        private readonly TransactionNotificationService $notificationService,
     ) {
     }
 
-    public function transfer(string $sourceCardNumber, string $destinationCardNumber, int $amount): Transaction
+    public function execute(TransferData $transferData): Transaction
     {
-        if ($sourceCardNumber === $destinationCardNumber) {
+        if ($transferData->sourceCardNumber() === $transferData->destinationCardNumber()) {
             throw new InvalidTransferException('Source and destination cards must be different.');
         }
 
-        if ($amount <= 0) {
+        if ($transferData->amount() <= 0) {
             throw new InvalidTransferException('Transfer amount must be greater than zero.');
         }
 
-        $transaction = DB::transaction(function () use ($sourceCardNumber, $destinationCardNumber, $amount): Transaction {
-            $sourceCard = $this->cardRepository->findByNumberForUpdate($sourceCardNumber);
+        return DB::transaction(function () use ($transferData): Transaction {
+            $sourceCard = $this->cardRepository->findByNumberForUpdate($transferData->sourceCardNumber());
             if ($sourceCard === null) {
                 throw new CardNotFoundException();
             }
 
-            $destinationCard = $this->cardRepository->findByNumberForUpdate($destinationCardNumber);
+            $destinationCard = $this->cardRepository->findByNumberForUpdate($transferData->destinationCardNumber());
             if ($destinationCard === null) {
                 throw new CardNotFoundException();
             }
 
-            if ($sourceCard->balance < $amount) {
+            if ($sourceCard->balance < $transferData->amount()) {
                 throw new InsufficientFundsException();
             }
 
-            $this->cardRepository->decrementBalance($sourceCard, $amount);
-            $this->cardRepository->incrementBalance($destinationCard, $amount);
+            $this->cardRepository->decrementBalance($sourceCard, $transferData->amount());
+            $this->cardRepository->incrementBalance($destinationCard, $transferData->amount());
 
             $transaction = $this->transactionRepository->create([
                 'reference_number' => $this->generateReferenceNumber(),
@@ -56,15 +56,11 @@ final class TransferService
                 'destination_card_id' => $destinationCard->id,
                 'source_user_id' => $sourceCard->account->user_id,
                 'destination_user_id' => $destinationCard->account->user_id,
-                'amount' => $amount,
+                'amount' => $transferData->amount(),
             ]);
 
             return $transaction->load(['sourceCard', 'destinationCard']);
         });
-
-        $this->notificationService->notifyParticipants($transaction);
-
-        return $transaction;
     }
 
     private function generateReferenceNumber(): string
