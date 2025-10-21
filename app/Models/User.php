@@ -8,6 +8,8 @@ use Carbon\CarbonInterface;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -15,6 +17,7 @@ use Illuminate\Notifications\Notifiable;
  * @property-read int $id
  * @property-read string $name
  * @property-read string $email
+ * @property-read string $phone
  * @property-read CarbonInterface|null $email_verified_at
  * @property-read string $password
  * @property-read string|null $remember_token
@@ -43,11 +46,32 @@ final class User extends Authenticatable implements MustVerifyEmail
             'id' => 'integer',
             'name' => 'string',
             'email' => 'string',
+            'phone' => 'string',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'remember_token' => 'string',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    public function accounts(): HasMany
+    {
+        return $this->hasMany(Account::class);
+    }
+
+    public function cards(): HasManyThrough
+    {
+        return $this->hasManyThrough(Card::class, Account::class);
+    }
+
+    public function sentTransactions(): HasManyThrough
+    {
+        return $this->hasManyThrough(Transaction::class, Card::class, 'account_id', 'source_card_id');
+    }
+
+    public function receivedTransactions(): HasManyThrough
+    {
+        return $this->hasManyThrough(Transaction::class, Card::class, 'account_id', 'destination_card_id');
     }
 }

@@ -8,6 +8,12 @@ use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
+$projectRoot = dirname(__DIR__);
+
+if (! file_exists($projectRoot.'/.env') && file_exists($projectRoot.'/.env.example')) {
+    copy($projectRoot.'/.env.example', $projectRoot.'/.env');
+}
+
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
@@ -18,7 +24,7 @@ pest()->extend(TestCase::class)
 
         $this->freezeTime();
     })
-    ->in('Browser', 'Feature', 'Unit');
+    ->in('Feature', 'Unit');
 
 expect()->extend('toBeOne', fn () => $this->toBe(1));
 
