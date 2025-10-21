@@ -15,20 +15,66 @@ A simplified banking API built with Laravel that demonstrates clean architecture
 
 ## Architecture Overview
 
+Fundit is organised using a Clean Architecture layout with explicit **Domain**, **Application**, **Infrastructure**, and
+**Interface** layers. Each layer exposes clear contracts to the next so that business rules remain framework agnostic and easy
+to test.
+
+### Domain Layer (`app/Domain`)
+
 ```
-app/
-├── Exceptions/           # Domain specific exception types
-├── Http/
-│   ├── Controllers/      # Thin controllers delegating to services
-│   ├── Requests/         # Form request validation
-│   └── Resources/        # API response transformers
-├── Jobs/                 # Queueable jobs (SMS notifications)
-├── Models/               # Eloquent models and relationships
-├── Repositories/         # Repository interfaces and Eloquent implementations
-└── Services/
-    ├── Notifications/    # SMS providers & manager (Strategy pattern)
-    └── Transactions/     # Transfer logic and notification orchestration
+app/Domain/Banking
+├── DTO/                     # Immutable request/response data objects
+├── Repositories/            # Repository contracts consumed by the application layer
+└── Services/                # Pure domain services (fee rules, masking helpers)
 ```
+
+The domain layer owns the ubiquitous language of the project. DTOs represent transfer intents, cards, and user summaries while
+repository interfaces describe the available persistence operations without binding to Eloquent specifics.
+
+### Application Layer (`app/Application`)
+
+```
+app/Application/Banking
+└── Services/                # Use-case orchestrators (transfer, reporting, notifications)
+```
+
+Application services coordinate domain services, repositories, and jobs to fulfil a single use case. They return DTOs so that
+callers can remain decoupled from persistence models. Examples include `TransferService::handle` and `ReportService::topUsers`.
+
+### Infrastructure Layer (`app/Infrastructure`)
+
+```
+app/Infrastructure/Persistence
+└── Eloquent/                 # Concrete repository implementations & query helpers
+```
+
+These classes adapt the repository contracts to Eloquent models. Swapping to another datastore only requires new implementations
+within this layer while the application and domain logic stay untouched.
+
+### Interface Layer (`app/Http`, `app/Jobs`, `app/Services/Notifications`)
+
+```
+app/Http
+├── Controllers/             # Map HTTP requests to application services
+├── Requests/                # Validation & authorisation rules
+└── Resources/               # API transformers & masking logic
+
+app/Jobs                     # Queueable jobs (SMS dispatch, ledger recording)
+
+app/Services/Notifications
+└── Sms/                     # Strategy pattern selecting the active SMS provider
+```
+
+Controllers remain intentionally thin: they receive validated payloads, call the relevant application service, and wrap the
+result in a resource. SMS dispatch runs through queued jobs to keep HTTP latency predictable while the `SmsManager` selects the
+active provider (`KavenegarSmsProvider` or `SmsIrProvider`) using the strategy pattern.
+
+### Cross-Cutting Concerns
+
+- `app/Providers` registers container bindings for repositories, managers, and third-party services.
+- `config/sms.php` centralises provider credentials and runtime toggles.
+- `database/seeders` provide rich demo data for transfers and reports.
+- `tests/` contains Pest suites exercising domain services (unit) and HTTP flows (feature) to guard regressions.
 
 ## Requirements
 
