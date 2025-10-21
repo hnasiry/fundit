@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use PDOException;
 
-class DatabaseMonitorCommand extends Command
+final class DatabaseMonitorCommand extends Command
 {
     protected $signature = 'db:monitor';
     protected $description = 'Check if the database is ready';
