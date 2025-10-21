@@ -17,6 +17,8 @@ return [
 
     'name' => env('HORIZON_NAME'),
 
+    'allowed_viewer_emails' => explode(',', (string)env('HORIZON_VIEWER_EMAILS', '')),
+
     /*
     |--------------------------------------------------------------------------
     | Horizon Domain
