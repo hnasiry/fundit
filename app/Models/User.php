@@ -86,4 +86,9 @@ final class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasManyThrough(Transaction::class, Card::class, 'account_id', 'destination_card_id');
     }
+
+    public function routeNotificationForSms(): ?string
+    {
+        return $this->phone;
+    }
 }

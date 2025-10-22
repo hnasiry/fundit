@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Application\Banking\Services;
 
-use App\Jobs\SendSmsNotificationJob;
 use App\Models\Transaction;
+use App\Notifications\TransactionParticipantSmsNotification;
 
 final class TransactionNotificationService
 {
@@ -16,31 +16,29 @@ final class TransactionNotificationService
             'destinationCard.account.user',
         ]);
 
-        $senderPhone = $transaction->sourceCard->account->user->phone ?? null;
-        $receiverPhone = $transaction->destinationCard->account->user->phone ?? null;
+        $sender = $transaction->sourceCard->account->user;
+        $receiver = $transaction->destinationCard->account->user;
 
-        if ($senderPhone) {
-            SendSmsNotificationJob::dispatch(
-                $senderPhone,
+        if ($sender !== null) {
+            $sender->notify(new TransactionParticipantSmsNotification(
                 sprintf(
                     'You sent %s to card %s. Ref: %s',
                     number_format($transaction->amount),
                     $transaction->destinationCard->masked_number,
                     $transaction->reference_number
                 )
-            );
+            ));
         }
 
-        if ($receiverPhone) {
-            SendSmsNotificationJob::dispatch(
-                $receiverPhone,
+        if ($receiver !== null) {
+            $receiver->notify(new TransactionParticipantSmsNotification(
                 sprintf(
                     'You received %s from card %s. Ref: %s',
                     number_format($transaction->amount),
                     $transaction->sourceCard->masked_number,
                     $transaction->reference_number
                 )
-            );
+            ));
         }
     }
 }

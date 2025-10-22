@@ -7,11 +7,11 @@ use App\Domain\Banking\DTO\TransferData;
 use App\Models\Account;
 use App\Models\Card;
 use App\Models\User;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 
 it('returns the top users with their latest transactions', function (): void {
-    Queue::fake();
+    Notification::fake();
 
     $users = User::factory()->count(4)->create();
 
