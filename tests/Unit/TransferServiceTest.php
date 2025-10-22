@@ -6,14 +6,14 @@ use App\Application\Banking\Services\TransferFundsService;
 use App\Domain\Banking\DTO\TransferData;
 use App\Exceptions\CardNotFoundException;
 use App\Exceptions\InsufficientFundsException;
-use App\Jobs\SendSmsNotificationJob;
 use App\Models\Account;
 use App\Models\Card;
 use App\Models\User;
-use Illuminate\Support\Facades\Queue;
+use App\Notifications\TransactionParticipantSmsNotification;
+use Illuminate\Support\Facades\Notification;
 
 it('transfers funds between cards and updates balances', function (): void {
-    Queue::fake();
+    Notification::fake();
 
     $sourceUser = User::factory()->create();
     $destinationUser = User::factory()->create();
@@ -35,11 +35,35 @@ it('transfers funds between cards and updates balances', function (): void {
     expect($sourceCard->refresh()->balance)->toBe(125_000)
         ->and($destinationCard->refresh()->balance)->toBe(125_000);
 
-    Queue::assertPushed(SendSmsNotificationJob::class, 2);
+    Notification::assertSentTo(
+        $sourceUser,
+        TransactionParticipantSmsNotification::class,
+        function (TransactionParticipantSmsNotification $notification) use ($transaction, $destinationCard): bool {
+            return $notification->message() === sprintf(
+                'You sent %s to card %s. Ref: %s',
+                number_format($transaction->amount),
+                $destinationCard->masked_number,
+                $transaction->reference_number
+            );
+        }
+    );
+
+    Notification::assertSentTo(
+        $destinationUser,
+        TransactionParticipantSmsNotification::class,
+        function (TransactionParticipantSmsNotification $notification) use ($transaction, $sourceCard): bool {
+            return $notification->message() === sprintf(
+                'You received %s from card %s. Ref: %s',
+                number_format($transaction->amount),
+                $sourceCard->masked_number,
+                $transaction->reference_number
+            );
+        }
+    );
 });
 
 it('throws an exception when source card has insufficient funds', function (): void {
-    Queue::fake();
+    Notification::fake();
 
     $sourceCard = Card::factory()
         ->for(Account::factory()->for(User::factory()))
@@ -56,7 +80,7 @@ it('throws an exception when source card has insufficient funds', function (): v
 })->throws(InsufficientFundsException::class);
 
 it('throws an exception when a card cannot be found', function (): void {
-    Queue::fake();
+    Notification::fake();
 
     $destinationCard = Card::factory()
         ->for(Account::factory()->for(User::factory()))

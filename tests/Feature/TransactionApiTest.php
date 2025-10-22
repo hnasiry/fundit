@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-use App\Jobs\SendSmsNotificationJob;
 use App\Models\Account;
 use App\Models\Card;
 use App\Models\User;
-use Illuminate\Support\Facades\Queue;
+use App\Notifications\TransactionParticipantSmsNotification;
+use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 
 it('performs a card to card transfer', function (): void {
-    Queue::fake();
+    Notification::fake();
 
     $sourceUser = User::factory()->create();
     $destinationUser = User::factory()->create();
@@ -39,11 +39,35 @@ it('performs a card to card transfer', function (): void {
     expect($sourceCard->refresh()->balance)->toBe(350_000)
         ->and($destinationCard->refresh()->balance)->toBe(250_000);
 
-    Queue::assertPushed(SendSmsNotificationJob::class, 2);
+    Notification::assertSentTo(
+        $sourceUser,
+        TransactionParticipantSmsNotification::class,
+        function (TransactionParticipantSmsNotification $notification) use ($destinationCard, $response): bool {
+            return $notification->message() === sprintf(
+                'You sent %s to card %s. Ref: %s',
+                number_format(150_000),
+                $destinationCard->masked_number,
+                $response->json('reference_number')
+            );
+        }
+    );
+
+    Notification::assertSentTo(
+        $destinationUser,
+        TransactionParticipantSmsNotification::class,
+        function (TransactionParticipantSmsNotification $notification) use ($sourceCard, $response): bool {
+            return $notification->message() === sprintf(
+                'You received %s from card %s. Ref: %s',
+                number_format(150_000),
+                $sourceCard->masked_number,
+                $response->json('reference_number')
+            );
+        }
+    );
 });
 
 it('prevents transferring from a card owned by another user', function (): void {
-    Queue::fake();
+    Notification::fake();
 
     $authorizedUser = User::factory()->create();
     $otherUser = User::factory()->create();
@@ -67,5 +91,5 @@ it('prevents transferring from a card owned by another user', function (): void 
     expect($authorizedCard->refresh()->balance)->toBe(200_000)
         ->and($otherCard->refresh()->balance)->toBe(100_000);
 
-    Queue::assertNothingPushed();
+    Notification::assertNothingSent();
 });
